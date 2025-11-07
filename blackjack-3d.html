@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Blackjack Pseudo-3D (Offline)</title>
+<style>
+  :root{
+    --bg:#0b2b1f;
+    --panel:#083826;
+    --accent: #f6c85c;
+    --card-w: 92px;
+    --card-h: 140px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; height:100vh; display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(1200px 600px at 10% 20%, #062819 0%, var(--bg) 30%, #031211 100%);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    color:#eee;
+  }
+
+  .wrapper{
+    width:980px; max-width:95vw; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06));
+    border-radius:14px; padding:18px; display:flex; gap:18px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  }
+
+  /* Left: 3D table */
+  .table-area{
+    flex:1.6; min-height:520px; position:relative; padding:14px;
+    border-radius:8px; background: linear-gradient(180deg,#083826 0%, #05241a 100%);
+    display:flex; flex-direction:column; align-items:center;
+    justify-content:flex-start; overflow:hidden;
+  }
+
+  .table-top{
+    width:100%; height:420px; perspective:1000px; display:flex; align-items:center; justify-content:center;
+    position:relative;
+  }
+
+  /* circular felt */
+  .felt{
+    width:86%; height:320px; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.02), rgba(0,0,0,0.12)),
+                      linear-gradient(0deg,#0b5f48, #053a2b);
+    border-radius:50%; transform:translateY(6px);
+    box-shadow: inset 0 6px 30px rgba(0,0,0,0.6), 0 8px 30px rgba(0,0,0,0.6);
+    display:flex; align-items:center; justify-content:center; position:relative;
+  }
+
+  .card-slot{
+    position:absolute; transform-style:preserve-3d;
+  }
+  .dealer-slot{ top:48px; transform: translateZ(-10px) rotateX(7deg); }
+  .player-slot{ bottom:40px; transform: translateZ(10px) rotateX(-6deg); }
+
+  /* card */
+  .card{
+    width:var(--card-w); height:var(--card-h); border-radius:10px;
+    background:linear-gradient(180deg,#fff,#f7f7f7); border:2px solid rgba(0,0,0,0.15);
+    box-shadow: 0 8px 18px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.15) inset;
+    display:flex; flex-direction:column; justify-content:space-between; padding:8px;
+    transform-origin:center; transform-style:preserve-3d;
+    transition: transform 280ms cubic-bezier(.2,.9,.3,1), box-shadow 180ms;
+    user-select:none; cursor:default;
+    position:absolute;
+  }
+  .card.face-down{
+    background: linear-gradient(180deg,#10322a,#08221a);
+    border: 2px solid rgba(255,255,255,0.03);
+    color:transparent;
+    background-image:
+      repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0 6px, transparent 6px 12px);
+  }
+  .card .corner{ font-weight:700; font-size:16px; }
+  .card .big-suit{ font-size:64px; text-align:center; line-height:1; margin-top:8px; opacity:0.9; }
+  .card.red .corner, .card.red .big-suit{ color:#bf1d28; }
+  .card.black .corner, .card.black .big-suit{ color:#1a1a1a; }
+
+  /* spread */
+  .player-slot .card{ transition: transform 480ms cubic-bezier(.2,.8,.25,1); }
+  .dealer-slot .card{ transition: transform 480ms cubic-bezier(.2,.8,.25,1); }
+
+  .card:hover{ transform: translateY(-8px) rotateX(6deg) scale(1.03); z-index:50; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
+
+  /* Right: controls */
+  .panel{
+    width:320px; max-width:40%; padding:14px; border-radius:10px; background: rgba(0,0,0,0.22);
+    display:flex; flex-direction:column; gap:12px; align-items:stretch;
+  }
+  .title{ font-size:20px; font-weight:700; color:var(--accent); display:flex; align-items:center; gap:8px; }
+  .score{
+    display:flex; gap:12px; justify-content:space-between; padding:8px 12px; background:rgba(255,255,255,0.02); border-radius:8px;
+    font-size:16px; color:#e6f7ee;
+  }
+  .controls{ display:flex; gap:10px; margin-top:8px; }
+  button{
+    border:0; padding:10px 12px; border-radius:8px; font-weight:700; cursor:pointer;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.5);
+  }
+  .btn-hit{ background:linear-gradient(180deg,#2ecc71,#22b45a); color:#05220f; flex:1; }
+  .btn-stand{ background:linear-gradient(180deg,#f39c12,#d87b05); color:#2a1806; flex:1; }
+  .btn-restart{ background:linear-gradient(180deg,#3498db,#2176b2); color:#fbfdff; width:100%; }
+  .message{ min-height:38px; font-size:15px; padding:8px 10px; border-radius:8px; background:rgba(255,255,255,0.02); color:#fff; display:flex; align-items:center; justify-content:center; text-align:center; }
+
+  .small{ font-size:13px; color:#dceee0; opacity:0.9; }
+  .hint{ font-size:12px; color:#bcd9c7; opacity:0.8; }
+
+  /* responsive tweaks */
+  @media (max-width:880px){
+    .wrapper{ flex-direction:column; padding:12px; }
+    .table-area{ order:2; min-height:420px; }
+    .panel{ order:1; width:100%; max-width:none; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrapper" role="application" aria-label="Blackjack Pseudo 3D">
+    <div class="table-area" id="tableArea">
+      <div class="table-top">
+        <div class="felt" id="felt">
+          <div class="card-slot dealer-slot" id="dealerSlot" style="width:480px; height:160px;"></div>
+          <div class="card-slot player-slot" id="playerSlot" style="width:520px; height:160px;"></div>
+          <!-- deck mock -->
+          <div id="deckMock" style="position:absolute; right:18px; top:40px; transform: rotateX(8deg) translateZ(0);">
+            <div class="card face-down" style="position:relative; transform: rotateY(-12deg) translateX(0px); width:72px; height:108px; opacity:0.95;"></div>
+            <div class="card face-down" style="position:relative; transform: rotateY(-6deg) translateX(-6px); width:72px; height:108px; opacity:0.9;"></div>
+            <div class="card face-down" style="position:relative; transform: rotateY(0deg) translateX(-12px); width:72px; height:108px; opacity:0.85;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel">
+      <div class="title">🃏 Blackjack Pseudo-3D</div>
+      <div class="score">
+        <div>
+          <div class="small">Pemain</div>
+          <div id="playerScore">0</div>
+        </div>
+        <div>
+          <div class="small">Dealer</div>
+          <div id="dealerScore">0</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn-hit" id="hitBtn">Hit</button>
+        <button class="btn-stand" id="standBtn">Stand</button>
+      </div>
+
+      <button class="btn-restart" id="restartBtn" style="display:none;">Main Lagi</button>
+
+      <div class="message" id="message">Klik <strong>Hit</strong> untuk ambil kartu. <span class="hint">Dealer berdiri di 17+</span></div>
+
+      <div class="small">Aturan singkat: Kartu angka = nilai angka. J/Q/K = 10. As = 1 atau 11. Dealer akan mengambil sampai total ≥ 17.</div>
+    </div>
+  </div>
+
+<script>
+/* Blackjack logic + pseudo-3D rendering using DOM elements */
+
+/* --- Helpers & state --- */
+const suits = ['♥','♦','♣','♠'];
+const ranks = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+
+let deck = [];
+let playerHand = [];
+let dealerHand = [];
+let playerSlot = document.getElementById('playerSlot');
+let dealerSlot = document.getElementById('dealerSlot');
+let playerScoreEl = document.getElementById('playerScore');
+let dealerScoreEl = document.getElementById('dealerScore');
+let messageEl = document.getElementById('message');
+let hitBtn = document.getElementById('hitBtn');
+let standBtn = document.getElementById('standBtn');
+let restartBtn = document.getElementById('restartBtn');
+
+function makeDeck(){
+  const d = [];
+  for(const s of suits) for(const r of ranks) d.push({rank:r, suit:s});
+  shuffle(d);
+  return d;
+}
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } }
+
+function cardValue(c){
+  if(['J','Q','K'].includes(c.rank)) return 10;
+  if(c.rank === 'A') return 11;
+  return parseInt(c.rank,10);
+}
+function handValue(hand){
+  let v = 0, aces = 0;
+  for(const c of hand){ v += cardValue(c); if(c.rank==='A') aces++; }
+  while(v>21 && aces>0){ v-=10; aces--; }
+  return v;
+}
+
+/* --- DOM card creation (visual) --- */
+function createCardElement(cardObj, faceDown=false){
+  const el = document.createElement('div');
+  el.className = 'card' + (faceDown ? ' face-down' : (cardObj && (cardObj.suit==='♥' || cardObj.suit==='♦') ? ' red' : ' black'));
+  el.style.width = getComputedStyle(document.documentElement).getPropertyValue('--card-w') || '92px';
+  el.style.height = getComputedStyle(document.documentElement).getPropertyValue('--card-h') || '140px';
+  el.dataset.faceDown = faceDown ? '1' : '0';
+  if(!faceDown && cardObj){
+    const cornerTop = document.createElement('div');
+    cornerTop.className = 'corner';
+    cornerTop.style.alignSelf = 'flex-start';
+    cornerTop.innerHTML = `${cardObj.rank}<br><span style="font-size:18px;line-height:0.85;">${cardObj.suit}</span>`;
+    const center = document.createElement('div');
+    center.className = 'big-suit';
+    center.innerText = cardObj.suit;
+    const cornerBottom = document.createElement('div');
+    cornerBottom.className = 'corner';
+    cornerBottom.style.alignSelf = 'flex-end';
+    cornerBottom.style.transform = 'rotate(180deg)';
+    cornerBottom.innerHTML = `${cardObj.rank}<br><span style="font-size:18px;line-height:0.85;">${cardObj.suit}</span>`;
+    el.appendChild(cornerTop);
+    el.appendChild(center);
+    el.appendChild(cornerBottom);
+  }
+  return el;
+}
+
+/* positioning helpers */
+function arrangeCards(slotEl, isPlayer=true){
+  // position card elements inside slot with spread and small z offsets for pseudo-3D
+  const cards = Array.from(slotEl.children);
+  const count = cards.length;
+  const slotW = slotEl.clientWidth || 480;
+  const span = Math.min( (count-1)*28, slotW - 80 );
+  const startX = -(span/2);
+  cards.forEach((c,i)=>{
+    const x = startX + i*(span/(Math.max(1,count-1)));
+    const z = i * 6 * (isPlayer ? 1 : -1);
+    const y = isPlayer ? (i* -2) : (i* 2);
+    c.style.left = `calc(50% + ${x}px)`;
+    c.style.top = isPlayer ? `${60 - i*6}px` : `${20 + i*6}px`;
+    c.style.transform = `translateX(-50%) translateY(0px) translateZ(${z}px) rotateX(${isPlayer ? -6 : 6}deg) rotateY(${(i - count/2)*6}deg)`;
+    c.style.zIndex = 100 + i;
+    // smooth entry
+    c.style.transition = 'transform 420ms cubic-bezier(.2,.8,.2,1), left 420ms, top 420ms';
+  });
+}
+
+/* clear area helpers */
+function clearSlot(slotEl){ while(slotEl.firstChild) slotEl.removeChild(slotEl.firstChild); }
+
+/* --- Game actions --- */
+async function dealInitial(){
+  deck = makeDeck();
+  playerHand = [];
+  dealerHand = [];
+  clearSlot(playerSlot);
+  clearSlot(dealerSlot);
+  messageEl.innerText = 'Membagikan kartu...';
+  hitBtn.disabled = true; standBtn.disabled = true; restartBtn.style.display='none';
+
+  // deal: P D P D (dealer second card face-down)
+  await dealToPlayer(1);
+  await sleep(140);
+  await dealToDealer(1, false);
+  await sleep(140);
+  await dealToPlayer(1);
+  await sleep(140);
+  await dealToDealer(1, true);
+  // show scores (partial)
+  updateScores();
+  await sleep(300);
+  messageEl.innerText = 'Giliran kamu — Hit atau Stand';
+  hitBtn.disabled = false; standBtn.disabled = false;
+
+  // check natural blackjack
+  const pVal = handValue(playerHand);
+  const dVal = handValue(dealerHand);
+  if(pVal === 21 || dVal === 21){
+    // reveal dealer hole card and determine
+    revealDealerHole();
+    await sleep(320);
+    finalizeAfterDealerPlay(true);
+  }
+}
+
+async function dealToPlayer(n=1){
+  for(let i=0;i<n;i++){
+    const c = deck.pop();
+    playerHand.push(c);
+    const el = createCardElement(c, false);
+    playerSlot.appendChild(el);
+    arrangeCards(playerSlot, true);
+    await sleep(120);
+  }
+  updateScores();
+}
+
+async function dealToDealer(n=1, faceDown=false){
+  for(let i=0;i<n;i++){
+    const c = deck.pop();
+    dealerHand.push(c);
+    const el = createCardElement(faceDown ? null : c, faceDown);
+    // tag real card for later reveal
+    el.dataset.realRank = c.rank;
+    el.dataset.realSuit = c.suit;
+    el.dataset.faceDown = faceDown ? '1' : '0';
+    el.classList.toggle('face-down', !!faceDown);
+    dealerSlot.appendChild(el);
+    arrangeCards(dealerSlot, false);
+    await sleep(140);
+  }
+  updateScores();
+}
+
+function revealDealerHole(){
+  // find face-down element and replace content with actual card
+  const items = Array.from(dealerSlot.children);
+  for(const el of items){
+    if(el.dataset.faceDown === '1'){
+      el.classList.remove('face-down');
+      el.dataset.faceDown = '0';
+      // build inner content based on stored realRank/realSuit
+      el.innerHTML = '';
+      const real = { rank: el.dataset.realRank, suit: el.dataset.realSuit };
+      const cornerTop = document.createElement('div');
+      cornerTop.className = 'corner';
+      cornerTop.style.alignSelf = 'flex-start';
+      cornerTop.innerHTML = `${real.rank}<br><span style="font-size:18px;line-height:0.85;">${real.suit}</span>`;
+      const center = document.createElement('div');
+      center.className = 'big-suit';
+      center.innerText = real.suit;
+      const cornerBottom = document.createElement('div');
+      cornerBottom.className = 'corner';
+      cornerBottom.style.alignSelf = 'flex-end';
+      cornerBottom.style.transform = 'rotate(180deg)';
+      cornerBottom.innerHTML = `${real.rank}<br><span style="font-size:18px;line-height:0.85;">${real.suit}</span>`;
+      el.appendChild(cornerTop);
+      el.appendChild(center);
+      el.appendChild(cornerBottom);
+    }
+  }
+  updateScores();
+}
+
+async function playerHit(){
+  hitBtn.disabled = true;
+  standBtn.disabled = true;
+  await dealToPlayer(1);
+  updateScores();
+  const v = handValue(playerHand);
+  if(v > 21){
+    // bust
+    revealDealerHole();
+    await sleep(260);
+    endGame('💥 Kamu Bust! Kalah.');
+  } else {
+    hitBtn.disabled = false;
+    standBtn.disabled = false;
+  }
+}
+
+async function playerStand(){
+  hitBtn.disabled = true;
+  standBtn.disabled = true;
+  messageEl.innerText = 'Giliran dealer...';
+  // reveal hole and let dealer play
+  revealDealerHole();
+  await sleep(420);
+  // dealer hits until 17
+  while(handValue(dealerHand) < 17){
+    await dealToDealer(1, false);
+    await sleep(340);
+  }
+  finalizeAfterDealerPlay();
+}
+
+function finalizeAfterDealerPlay(natural=false){
+  // compare values and decide result
+  const p = handValue(playerHand);
+  const d = handValue(dealerHand);
+  let msg = '';
+  if(d > 21) msg = '🎉 Dealer Bust! Kamu Menang!';
+  else if(p > 21) msg = '💥 Kamu Bust! Kalah.';
+  else if(p > d) msg = '🎉 Kamu Menang!';
+  else if(p < d) msg = '😢 Kamu Kalah.';
+  else msg = '🤝 Seri!';
+  // If both blackjack natural handled earlier - but final logic remains valid
+  endGame(msg);
+}
+
+function endGame(msg){
+  messageEl.innerText = msg;
+  restartBtn.style.display = 'block';
+  hitBtn.style.display = 'none';
+  standBtn.style.display = 'none';
+  updateScores(true);
+}
+
+function updateScores(showDealerFull=false){
+  playerScoreEl.innerText = handValue(playerHand);
+  const holeDown = Array.from(dealerSlot.children).some(c => c.dataset.faceDown === '1');
+  if(holeDown && !showDealerFull){
+    // show partial value (first card + ?)
+    const first = dealerHand[0];
+    const v = cardValue(first);
+    dealerScoreEl.innerText = `${v} + ?`;
+  } else {
+    dealerScoreEl.innerText = handValue(dealerHand);
+  }
+}
+
+/* --- UI wiring --- */
+hitBtn.addEventListener('click', ()=>{ playerHit(); });
+standBtn.addEventListener('click', ()=>{ playerStand(); });
+restartBtn.addEventListener('click', ()=>{
+  // restore button visibility
+  hitBtn.style.display = ''; standBtn.style.display = '';
+  restartBtn.style.display = 'none';
+  dealInitial();
+});
+
+/* utility */
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+/* initial start */
+dealInitial();
+
+/* allow clicking cards for small highlight */
+document.addEventListener('click', (ev)=>{
+  const c = ev.target.closest('.card');
+  if(c && c.parentElement === playerSlot){
+    c.style.transform += ' translateY(-8px) scale(1.04)';
+    setTimeout(()=>{ arrangeCards(playerSlot,true); }, 420);
+  }
+});
+</script>
+</body>
+</html>
